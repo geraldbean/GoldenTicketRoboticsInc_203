@@ -1,25 +1,81 @@
 /**
- * @file read-wheel-encoder.ino
+ * @file motor-angular-rate.ino
  * @author Joshua Marshall (joshua.marshall@queensu.ca)
- * @brief Arduino program to read from a digital quadrature encoder.
- * @version 2.0
+ * @brief Arduino program to estimate motor speed from encoder.
+ * @version 2.1
  * @date 2022-12-09
  *
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2021-2022
  *
  */
 
-// Encoder digital pins
-const byte SIGNAL_A = 8;
-const byte SIGNAL_B = 9;
+// Wheel PWM pin (must be a PWM pin)
+int EA = 6;
+int EB = 10;
+
+// Wheel direction digital pins for right wheel
+int I1 = 7;
+int I2 = 5;
+int I3 = 12;
+int I4 = 11;
+
+// Motor PWM command variable [0-255]
+byte u_r = 0;
+byte u_l = 0;
+
+// left wheel encoder digital pins
+const byte SIGNAL_A = 3;
+const byte SIGNAL_B = 4;
+
+// left wheel encoder digital pins
+const byte SIGNAL_AR = 9;
+const byte SIGNAL_BR = 8;
+
+// Encoder ticks per (motor) revolution (TPR)
+const int TPR = 3000;
+
+// Wheel radius [m]
+const double RHO = 0.0625;
 
 // Counter to keep track of encoder ticks [integer]
 volatile long encoder_ticks = 0;
+volatile long encoder_ticksr = 0;
 
-// Counter to keep track of the last number of ticks [integer]
-long encoder_ticks_last = 0;
+// Variable to store estimated angular rate of left wheel [rad/s]
+double omega_L = 0.0;
+double omega_LR = 0.0;
 
-// This function is called when SIGNAL_A goes HIGH
+//variables to store the velocity
+double v_right = 0.0;
+double v_left = 0.0;
+
+//vhat and what
+double v_hat = 0.0;
+double w_hat = 0.0;
+
+// Sampling interval for measurements in milliseconds
+const int T = 1000;
+
+// Counters for milliseconds during interval
+long t_now = 0;
+long t_last = 0;
+
+//set the P controller constants
+int kp = 150;
+//for the PI controller
+int kl = 100;
+int v_ld = 220;
+int v_rd = 220;
+double v_r = 0.0;
+double v_l = 0.0;
+double l = 0.2775;
+
+double diff_l= 0.0;
+double diff_r = 0.0;
+double diff_prev1 = 0.0;
+double diff_prev2 = 0.0;
+
+// This function is called when SIGNAL_A goes HIGH when clockwise
 void decodeEncoderTicks()
 {
     if (digitalRead(SIGNAL_B) == LOW)
@@ -32,6 +88,17 @@ void decodeEncoderTicks()
         // SIGNAL_B leads SIGNAL_A, so count the other way
         encoder_ticks++;
     }
+
+    //for other wheel
+    if (digitalRead(SIGNAL_BR) == LOW)
+    {
+        encoder_ticksr--;
+    }
+    else
+    {
+        encoder_ticksr++;
+    }
+
 }
 
 void setup()
@@ -39,12 +106,28 @@ void setup()
     // Open the serial port at 9600 bps
     Serial.begin(9600);
 
-    // Set the pin modes for the encoders
+    // Set the pin modes for the motor driver
+    pinMode(EA, OUTPUT);
+    pinMode(I1, OUTPUT);
+    pinMode(I2, OUTPUT);
+
+    pinMode(EB, OUTPUT);
+    pinMode(I3, OUTPUT);
+    pinMode(I4, OUTPUT);
+
+    // Set the pin modes for the encoders right side
     pinMode(SIGNAL_A, INPUT);
     pinMode(SIGNAL_B, INPUT);
 
-    // Every time SIGNAL_A goes HIGH, this is a pulse
-    attachInterrupt(digitalPinToInterrupt(SIGNAL_A), decodeEncoderTicks, RISING);
+    // left side pin modes
+    pinMode(SIGNAL_AR, INPUT);
+    pinMode(SIGNAL_BR, INPUT);
+
+    // Every time the pin goes high, this is a pulse
+    attachInterrupt( digitalPinToInterrupt(SIGNAL_A), decodeEncoderTicks, RISING);
+
+    // for other wheel
+    attachInterrupt( digitalPinToInterrupt(SIGNAL_AR), decodeEncoderTicks, RISING);
 
     // Print a message
     Serial.print("Program initialized.");
@@ -53,18 +136,95 @@ void setup()
 
 void loop()
 {
-    // Do this if the encoder has moved
-    if (encoder_ticks != encoder_ticks_last)
+    // Get the elapsed time [ms]
+    t_now = millis();
+
+    if (t_now - t_last >= T)
     {
-        // Print some stuff to the serial monitor
-        Serial.print("Encoder ticks: ");
-        Serial.print(encoder_ticks);
+        // Estimate the rotational speed [rad/s]
+        omega_L = 2.0 * PI * ((double)encoder_ticks / (double)TPR) * 1000.0 / (double)(t_now - t_last);
+
+        //for the left wheel
+        omega_LR = 2.0 * PI * ((double)encoder_ticksr / (double)TPR) * 1000.0 / (double)(t_now - t_last);
+
+        //v estimate for right [m/s]
+        v_right = (0.0625 * omega_L);
+
+        //v estimate for left [m/s]
+        v_left = (0.0625 * omega_LR);
+
+        //velocity equation end of part 4
+        v_hat = 0.5 * (v_right + v_left);
+
+        //omega equation end of part 4
+        w_hat = (1/0.2775) * (v_right - v_left); 
+
+        v_r = ((l/2) * (w_hat)) + v_hat;
+        v_l = -((l/2) * (w_hat)) + v_hat;
+
+        //for the integral portion
+        diff_l = (v_l - v_hat);
+        diff_r = (v_r - v_hat);
+
+        diff_prev1 += diff_l;
+        diff_prev2 += diff_r;
+
+
+        //complete PI controller equations 
+        u_r = kp * (v_rd - v_r) + (kp * diff_l);
+        u_l = kp * (v_ld - v_l) + (kp * diff_r);
+
+
+        Serial.print("v_r: ");
+        Serial.print(v_r);
+        Serial.print("\t");
+        Serial.print("v_l: ");
+        Serial.print(v_l);
+
+                // // Print some stuff to the serial monitor
+                // Serial.print("W_RIGHT: ");
+                // Serial.print(omega_L);
+                // Serial.print(" rad/s");
+                // Serial.print("\t");
+                // Serial.print("V_RIGHT: ");
+                // Serial.print(v_right);
+                // Serial.print("m/s");
+
+                // Serial.print("\t");
+
+                // //print for the left motor?
+                // Serial.print("W_LEFT: ");
+                // Serial.print(omega_LR);
+                // Serial.print(" rad/s");
+                // Serial.print("\t");
+                // Serial.print("V_LEFT: ");
+                // Serial.print(v_left);
+                // Serial.print("m/s");
+        
         Serial.print("\n");
 
-        // Record the current number of encoder ticks
-        encoder_ticks_last = encoder_ticks;
+        // Record the current time [ms]
+        t_last = t_now;
+
+        // Reset the encoder ticks counter
+        encoder_ticks = 0;
+
+        //reset the other wheel
+        encoder_ticksr = 0;
     }
 
-    // Short delay [ms]
-    delay(100);
+    //Serial.println("reached!");
+    // Set the wheel motor PWM command [0-255]
+
+    // Select a direction right
+    digitalWrite(I1, HIGH);
+    digitalWrite(I2, LOW);
+
+    // select a direction left
+    digitalWrite(I3, LOW);
+    digitalWrite(I4, HIGH);
+
+    // PWM command to the motor driver
+    analogWrite(EA, u_l);
+    analogWrite(EB, u_r);
 }
