@@ -156,6 +156,14 @@ void loop()
     // Get the elapsed time [ms]
     t_now = millis();
 
+    sharp_val_left = analogRead(SHARP_PIN);
+    sharp_val_front = analogRead(SHARP_PIN1);
+    sharp_val_right = analogRead(SHARP_PIN2);
+
+    d_left = 141 + -0.72 * sharp_val_left + (0.000991)*pow(sharp_val_left,2);
+    d_front = 141 + -0.72 * sharp_val_front + (0.000991)*pow(sharp_val_front,2);
+    d_right = 141 + -0.72 * sharp_val_right + (0.000991)*pow(sharp_val_right,2);
+
     if (t_now - t_last >= T)
     {
         // Estimate the rotational speed [rad/s]
@@ -220,25 +228,17 @@ void loop()
 
         //reset the other wheel
         encoder_ticksr = 0;
+
+        if(d_front = 5){
+            u_r = u_r/10;
+        }
     }
 
     // Read the sensor output (0-1023, which is 10 bits and fits inside an Arduino int-type)
-    sharp_val_left = analogRead(SHARP_PIN);
-    sharp_val_front = analogRead(SHARP_PIN1);
-    sharp_val_right = analogRead(SHARP_PIN2);
-
-    d_left = 141 + -0.72 * sharp_val_left + (0.000991)*pow(sharp_val_left,2);
-    d_front = 141 + -0.72 * sharp_val_front + (0.000991)*pow(sharp_val_front,2);
-    d_right = 141 + -0.72 * sharp_val_right + (0.000991)*pow(sharp_val_right,2);
-
-    if(d_front = 25){
-        u_r = u_r/10;
-    }
 
 
     // Delay for a bit before reading the sensor again
     delay(500);
-}
 
     //Serial.println("reached!");
     // Set the wheel motor PWM command [0-255]
@@ -255,3 +255,4 @@ void loop()
     analogWrite(EA, u_l);
     analogWrite(EB, u_r);
 }
+
