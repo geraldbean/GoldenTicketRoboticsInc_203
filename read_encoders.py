@@ -3,26 +3,43 @@ from time import sleep
 import time 
 GPIO.setwarnings(False)
 
-clk = 7
-dt = 13
+chanA = 7
+chanB = 13
+
+chanC = 8
+chanD = 9
 
 GPIO.setmode(GPIO.BOARD)
-GPIO.setup(clk, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
-GPIO.setup(dt, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
+GPIO.setup(chanA, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
+GPIO.setup(chanB, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
 GPIO.setup(15, GPIO.OUT)
 GPIO.setup(11, GPIO.OUT)
 
+GPIO.setup(chanC, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
+GPIO.setup(chanD, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
+GPIO.setup(16, GPIO.OUT)
+GPIO.setup(10, GPIO.OUT)
+
 counter = 0
-clkLastState = GPIO.input(clk)
+counter2 = 0
+
+ALastState = GPIO.input(chanA)
+CLastState = GPIO.input(chanC)
 
 p=GPIO.PWM(15,100)
 q=GPIO.PWM(11,100)
 
+n=GPIO.PWM(16,100)
+u=GPIO.PWM(10,100)
+
 p.start(0)
 q.start(0)
 
+n.start(0)
+u.start(0)
     
 p.ChangeDutyCycle(100)
+n.ChangeDutyCycle(100)
 
 start=time.time()
 goal = 2
@@ -30,15 +47,27 @@ goal = 2
 try:
 
         while True:
-                clkState = GPIO.input(clk)
-                dtState = GPIO.input(dt)
-                if clkState != clkLastState:
-                        if dtState != clkState:
+                CState = GPIO.input(chanC)
+                DState = GPIO.input(chanD)
+                
+                if CState != CLastState:
+                    if DState != CState:
+                        counter2 += 1
+                    else:
+                        counter2 -= 1
+                        
+                CLastState = CState
+            
+                AState = GPIO.input(chanA)
+                BState = GPIO.input(chanB)
+                if AState != ALastState:
+                        if BState != AState:
                                 counter += 1
                         else:
                                 counter -= 1
-                        print(counter)
-                clkLastState = clkState
+                        print(counter, counter2)
+                ALastState = AState
+                
                 sleep(0.01)
 
                 #Controlling motors               
