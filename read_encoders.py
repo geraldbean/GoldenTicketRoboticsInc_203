@@ -3,11 +3,11 @@ from time import sleep
 import time 
 GPIO.setwarnings(False)
 
-chanA = 7
-chanB = 13
+chanA = 1
+chanB = 2
 
-chanC = 8
-chanD = 9
+chanC = 3
+chanD = 4
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(chanA, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
